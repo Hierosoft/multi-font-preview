@@ -350,3 +350,5 @@ It doesn't seem like we should delete the whole scrolledwindow on open, maybe ju
 Set a self.default_dir = None, but whenever a directory is opened at startup or any other time, set that. If not none during open director or save file, use it as the starting directory for the dialogs.
 
 Instead of having a successfully saved dialog, show the outcome in the status bar.
+
+Make a "Regular Only (if present)" checkbox (checked by default) and pass the value along so that whenever fonts are listed the check for "-R" or "Regular" is skipped and all font filenames are listed.

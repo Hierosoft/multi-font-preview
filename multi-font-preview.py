@@ -30,6 +30,7 @@ class SearchState:
 
 
 def get_regular(font_list):
+    """Return the shortest Regular variant if available."""
     candidates = []
     for font in font_list:
         lower = font.name.lower()
@@ -117,9 +118,12 @@ class FontReviewerFrame(wx.Frame):
         self.all_fontinfos = []
         self.found_dict = None
         self.current_size = 14
+        self.regular_only = True          # Default: Regular Only
+
         self.scroll_panel = None
         self.main_sizer = None
         self.spinner = None
+        self.regular_checkbox = None
 
         self.CreateStatusBar()
         self.SetStatusText("Initializing...")
@@ -177,10 +181,12 @@ class FontReviewerFrame(wx.Frame):
         try:
             state = collect_fonts(self.directory)
 
-            for key in list(state.found.keys()):
-                reg = get_regular(state.found[key])
-                if reg is not None:
-                    state.found[key] = [reg]
+            # Apply Regular Only filter only if checkbox is checked
+            if self.regular_only:
+                for key in list(state.found.keys()):
+                    reg = get_regular(state.found[key])
+                    if reg is not None:
+                        state.found[key] = [reg]
 
             self.found_dict = state.found
 
@@ -228,15 +234,25 @@ class FontReviewerFrame(wx.Frame):
         self.SetStatusText("Building font preview...")
 
         if not self.scroll_panel:
+            # Top control bar
             top_panel = wx.Panel(self)
             top_sizer = wx.BoxSizer(wx.HORIZONTAL)
+
             top_sizer.Add(wx.StaticText(top_panel, label="Font Size: "), 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 8)
             self.spinner = wx.SpinCtrl(top_panel, value=str(self.current_size), min=6, max=999, initial=self.current_size)
             self.spinner.Bind(wx.EVT_SPINCTRL, self.on_size_change)
             top_sizer.Add(self.spinner, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 8)
+
+            # Regular Only checkbox
+            self.regular_checkbox = wx.CheckBox(top_panel, label="Regular Only (if present)")
+            self.regular_checkbox.SetValue(self.regular_only)
+            self.regular_checkbox.Bind(wx.EVT_CHECKBOX, self.on_regular_checkbox)
+            top_sizer.Add(self.regular_checkbox, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 8)
+
             top_sizer.AddStretchSpacer()
             top_panel.SetSizer(top_sizer)
 
+            # Scrollable white area
             self.scroll_panel = wx.ScrolledWindow(self)
             self.scroll_panel.SetScrollRate(20, 20)
             self.scroll_panel.SetBackgroundColour(wx.WHITE)
@@ -304,6 +320,13 @@ class FontReviewerFrame(wx.Frame):
         if new_size != self.current_size:
             self.current_size = new_size
             self.rebuild_labels()
+
+    def on_regular_checkbox(self, event):
+        self.regular_only = self.regular_checkbox.GetValue()
+        if self.found_dict:
+            self.SetStatusText("Rebuilding preview with new filter...")
+            self.rebuild_labels()
+            self.SetStatusText("Ready - Use spinner to change font size")
 
     def on_open_directory(self, event):
         start_dir = self.default_dir if self.default_dir and os.path.isdir(self.default_dir) else self.directory
