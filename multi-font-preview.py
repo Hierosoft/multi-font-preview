@@ -351,11 +351,13 @@ class FontReviewerFrame(wx.Frame):
             for label, lower_name in self.font_labels:
                 if not self.regular_only or ('-r' in lower_name or 'regular' in lower_name):
                     label.Show()
-                    self.main_sizer.Add(label, 0, wx.TOP | wx.LEFT, 3, 16)
+                    # self.main_sizer.Add(label, 0, wx.TOP | wx.LEFT, 3, 16)
 
         self.scroll_panel.SetSizer(self.main_sizer)
         self.scroll_panel.Layout()
         self.scroll_panel.Refresh()
+        if full_rebuild:
+            self.rebuild_labels(False)
 
     def on_size_change(self, event):
         new_size = self.spinner.GetValue()

@@ -19,7 +19,7 @@ tool(s) used:
 - Grok
 - Gemini
 
-Scope of use: code described in subsections--typically modified by hand to improve logic, variable naming, integration, etc, but in this commit, unmodified.
+Scope of use: code described in subsections--typically modified by hand to improve logic, variable naming, integration, etc.
 
 ## multi-font-preview.py
 - 2026-04-16 https://grok.com/share/c2hhcmQtMg_a3a65264-c3d0-4d2a-b73f-063dd736cc2a
