@@ -126,6 +126,9 @@ class FontReviewerFrame(wx.Frame):
         self.activity = None
         self.status_label = None
 
+        # Store all created labels: (StaticText, lower_name)
+        self.font_labels = []
+
         self.CreateStatusBar()
         self.create_status_panel()
 
@@ -141,7 +144,6 @@ class FontReviewerFrame(wx.Frame):
         self.Centre()
 
     def create_status_panel(self):
-        """Create a panel inside the status bar to hold label + activity indicator cleanly."""
         self.status_panel = wx.Panel(self.GetStatusBar())
         sizer = wx.BoxSizer(wx.HORIZONTAL)
 
@@ -153,8 +155,6 @@ class FontReviewerFrame(wx.Frame):
         sizer.Add(self.activity, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
 
         self.status_panel.SetSizer(sizer)
-
-        # Bind resize to keep the panel fitted to the status bar
         self.Bind(wx.EVT_SIZE, self.on_frame_size)
 
     def on_frame_size(self, event):
@@ -166,8 +166,6 @@ class FontReviewerFrame(wx.Frame):
     def set_status_text(self, text):
         if self.status_label:
             self.status_label.SetLabel(text)
-        else:
-            self.SetStatusText(text)
 
     def start_activity(self):
         if self.activity:
@@ -222,18 +220,12 @@ class FontReviewerFrame(wx.Frame):
     def load_fonts_background(self):
         try:
             state = collect_fonts(self.directory)
-
-            if self.regular_only:
-                for key in list(state.found.keys()):
-                    reg = get_regular(state.found[key])
-                    if reg is not None:
-                        state.found[key] = [reg]
-
             self.found_dict = state.found
 
             wx.CallAfter(self.set_status_text, "Extracting and registering fonts...")
             done_names = set()
             self.all_fontinfos = []
+            self.font_labels = []
 
             for fontlist in self.found_dict.values():
                 for fi in fontlist:
@@ -277,7 +269,6 @@ class FontReviewerFrame(wx.Frame):
         self.set_status_text("Building font preview...")
 
         if not self.scroll_panel:
-            # Top control bar
             top_panel = wx.Panel(self)
             top_sizer = wx.BoxSizer(wx.HORIZONTAL)
 
@@ -294,7 +285,6 @@ class FontReviewerFrame(wx.Frame):
             top_sizer.AddStretchSpacer()
             top_panel.SetSizer(top_sizer)
 
-            # Scrollable white area
             self.scroll_panel = wx.ScrolledWindow(self)
             self.scroll_panel.SetScrollRate(20, 20)
             self.scroll_panel.SetBackgroundColour(wx.WHITE)
@@ -308,7 +298,7 @@ class FontReviewerFrame(wx.Frame):
             self.SetSizer(outer_sizer)
             self.Layout()
 
-        self.rebuild_labels()
+        self.rebuild_labels(full_rebuild=True)
 
         self.Fit()
         current_size = self.GetSize()
@@ -318,41 +308,50 @@ class FontReviewerFrame(wx.Frame):
         self.set_status_text("Ready - Use spinner to change font size")
         self.stop_activity()
 
-    def rebuild_labels(self):
+    def rebuild_labels(self, full_rebuild=False):
         if not self.main_sizer:
             return
 
-        self.main_sizer.Clear(True)
-        done_names = set()
+        if full_rebuild:
+            # First time: create widgets
+            self.main_sizer.Clear(True)
+            self.font_labels = []
 
-        for fontlist in self.found_dict.values():
-            for fi in fontlist:
-                if fi.name in done_names:
-                    continue
-                done_names.add(fi.name)
+            for fontlist in self.found_dict.values():
+                for fi in fontlist:
+                    if not os.path.isfile(fi.full_path):
+                        continue
 
-                if not os.path.isfile(fi.full_path):
-                    continue
+                    display_name = os.path.splitext(fi.name)[0]
+                    family_name = get_font_family_name(fi.full_path)
 
-                display_name = os.path.splitext(fi.name)[0]
-                family_name = get_font_family_name(fi.full_path)
+                    label = wx.StaticText(self.scroll_panel, label=display_name)
+                    label.SetForegroundColour(wx.BLACK)
 
-                label = wx.StaticText(self.scroll_panel, label=display_name)
-                label.SetForegroundColour(wx.BLACK)
+                    custom_font = wx.Font(self.current_size,
+                                          wx.FONTFAMILY_DEFAULT,
+                                          wx.FONTSTYLE_NORMAL,
+                                          wx.FONTWEIGHT_NORMAL,
+                                          faceName=family_name)
 
-                custom_font = wx.Font(self.current_size,
-                                      wx.FONTFAMILY_DEFAULT,
-                                      wx.FONTSTYLE_NORMAL,
-                                      wx.FONTWEIGHT_NORMAL,
-                                      faceName=family_name)
+                    if not custom_font.IsOk():
+                        custom_font = wx.Font(self.current_size, wx.FONTFAMILY_DEFAULT,
+                                              wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL)
 
-                if not custom_font.IsOk():
-                    custom_font = wx.Font(self.current_size, wx.FONTFAMILY_DEFAULT,
-                                          wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL)
+                    label.SetFont(custom_font)
 
-                label.SetFont(custom_font)
+                    self.font_labels.append((label, display_name.lower()))
+                    self.main_sizer.Add(label, 0, wx.TOP | wx.LEFT, 3, 16)
 
-                self.main_sizer.Add(label, 0, wx.TOP | wx.LEFT, 3, 16)
+        else:
+            # Filter mode: hide all, then show only the ones we want
+            for label, lower_name in self.font_labels:
+                label.Hide()
+
+            for label, lower_name in self.font_labels:
+                if not self.regular_only or ('-r' in lower_name or 'regular' in lower_name):
+                    label.Show()
+                    self.main_sizer.Add(label, 0, wx.TOP | wx.LEFT, 3, 16)
 
         self.scroll_panel.SetSizer(self.main_sizer)
         self.scroll_panel.Layout()
@@ -362,14 +361,11 @@ class FontReviewerFrame(wx.Frame):
         new_size = self.spinner.GetValue()
         if new_size != self.current_size:
             self.current_size = new_size
-            self.rebuild_labels()
+            self.rebuild_labels(full_rebuild=False)
 
     def on_regular_checkbox(self, event):
         self.regular_only = self.regular_checkbox.GetValue()
-        if self.found_dict:
-            self.set_status_text("Rebuilding preview...")
-            self.rebuild_labels()
-            self.set_status_text("Ready - Use spinner to change font size")
+        self.rebuild_labels(full_rebuild=False)
 
     def on_open_directory(self, event):
         start_dir = self.default_dir if self.default_dir and os.path.isdir(self.default_dir) else self.directory
@@ -384,6 +380,7 @@ class FontReviewerFrame(wx.Frame):
                 self.main_sizer.Clear(True)
             self.all_fontinfos = []
             self.found_dict = None
+            self.font_labels = []
             wx.CallAfter(self.start_loading, new_dir)
         dlg.Destroy()
 

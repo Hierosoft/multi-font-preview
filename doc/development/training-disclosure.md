@@ -413,3 +413,13 @@ if __name__ == '__main__':
     app.MainLoop()
 ```
 - above code is pasted from https://gemini.google.com/share/4c5998b6a340
+
+Perform the filtering of Regular or not regular on the frontend, so we will have to keep a list of StaticText elements, so whenever the box is toggled (or after the list is initially completed) we will need to remove all of the sizer's children, and only add the ones where the GetLabel() contains "Regular" or "-R" (case insensitive) if checked, otherwise add all of them.
+
+You have to use Detach() so the StaticText instance isn't disposed.
+
+When the box is unchecked then re-checked, the regular and non-regular fonts are both shown overlapping. Unchecking it fixes it, but checking it causes the problem again. It seems like they are added twice or something. The box is checked initially, but the entire list is shown instead of just regular.
+
+There is no change to the problem. Maybe we need to call Layout?
+
+There is no change to the problem. You need to hide each statictext manually, not just detach them. Then show them after adding them.
