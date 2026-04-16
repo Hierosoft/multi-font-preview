@@ -352,3 +352,64 @@ Set a self.default_dir = None, but whenever a directory is opened at startup or 
 Instead of having a successfully saved dialog, show the outcome in the status bar.
 
 Make a "Regular Only (if present)" checkbox (checked by default) and pass the value along so that whenever fonts are listed the check for "-R" or "Regular" is skipped and all font filenames are listed.
+
+Use wx.ActivityIndicator in the status bar while the loading message is shown
+
+```
+Traceback (most recent call last):
+  File "/usr/lib/python3/dist-packages/wx/core.py", line 3427, in <lambda>
+    lambda event: event.callable(*event.args, **event.kw) )
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/owner/git/multi-font-preview/multi-font-preview.py", line 279, in build_ui
+    self.GetStatusBar().SetStatusWidths([-1, 30])  # Reserve space for indicator
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+wx._core.wxAssertionError: C++ assertion ""(size_t)n == m_panes.GetCount()"" failed at ./src/generic/statusbr.cpp(172) in SetStatusWidths(): status bar field count mismatch
+```
+
+The spinner overlaps the status text, try to fix that with a sizer or whatever is conventional for wx status bar layout.
+
+The spinner still occupies the same space as the status label, causing overlap.
+
+The overlap still occurs. Use a sizer like this working example from Gemini:
+```
+import wx
+
+class StatusFrame(wx.Frame):
+    def __init__(self):
+        super().__init__(None, title="Status Bar Indicator Example", size=(400, 200))
+
+        # Create the status bar
+        self.CreateStatusBar()
+
+        # Create a panel to hold the indicator and label inside the status bar
+        self.status_panel = wx.Panel(self.GetStatusBar())
+        sizer = wx.BoxSizer(wx.HORIZONTAL)
+
+        # Create the widgets directly from wx
+        self.indicator = wx.ActivityIndicator(self.status_panel, size=(20, 20))
+        self.label = wx.StaticText(self.status_panel, label="Processing...")
+
+        # Add widgets to sizer
+        sizer.Add(self.indicator, 0, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 2)
+        sizer.Add(self.label, 0, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 2)
+
+        self.status_panel.SetSizer(sizer)
+
+        # Position the panel in the first field of the status bar
+        self.Bind(wx.EVT_SIZE, self.OnSize)
+
+        self.indicator.Start()
+        self.Show()
+
+    def OnSize(self, event):
+        # Ensure the panel stays in the first status bar field
+        rect = self.GetStatusBar().GetFieldRect(0)
+        self.status_panel.SetSize(rect)
+        event.Skip()
+
+if __name__ == '__main__':
+    app = wx.App()
+    StatusFrame()
+    app.MainLoop()
+```
+- above code is pasted from https://gemini.google.com/share/4c5998b6a340

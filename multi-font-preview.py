@@ -30,7 +30,6 @@ class SearchState:
 
 
 def get_regular(font_list):
-    """Return the shortest Regular variant if available."""
     candidates = []
     for font in font_list:
         lower = font.name.lower()
@@ -118,15 +117,17 @@ class FontReviewerFrame(wx.Frame):
         self.all_fontinfos = []
         self.found_dict = None
         self.current_size = 14
-        self.regular_only = True          # Default: Regular Only
+        self.regular_only = True
 
         self.scroll_panel = None
         self.main_sizer = None
         self.spinner = None
         self.regular_checkbox = None
+        self.activity = None
+        self.status_label = None
 
         self.CreateStatusBar()
-        self.SetStatusText("Initializing...")
+        self.create_status_panel()
 
         self.create_menu()
 
@@ -138,6 +139,45 @@ class FontReviewerFrame(wx.Frame):
         wx.CallAfter(self.start_loading)
 
         self.Centre()
+
+    def create_status_panel(self):
+        """Create a panel inside the status bar to hold label + activity indicator cleanly."""
+        self.status_panel = wx.Panel(self.GetStatusBar())
+        sizer = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.status_label = wx.StaticText(self.status_panel, label="Initializing...")
+        self.activity = wx.ActivityIndicator(self.status_panel, size=(20, 20))
+        self.activity.Hide()
+
+        sizer.Add(self.status_label, 1, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 8)
+        sizer.Add(self.activity, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
+
+        self.status_panel.SetSizer(sizer)
+
+        # Bind resize to keep the panel fitted to the status bar
+        self.Bind(wx.EVT_SIZE, self.on_frame_size)
+
+    def on_frame_size(self, event):
+        if hasattr(self, 'status_panel'):
+            rect = self.GetStatusBar().GetFieldRect(0)
+            self.status_panel.SetSize(rect)
+        event.Skip()
+
+    def set_status_text(self, text):
+        if self.status_label:
+            self.status_label.SetLabel(text)
+        else:
+            self.SetStatusText(text)
+
+    def start_activity(self):
+        if self.activity:
+            self.activity.Show()
+            self.activity.Start()
+
+    def stop_activity(self):
+        if self.activity:
+            self.activity.Stop()
+            self.activity.Hide()
 
     def create_menu(self):
         menubar = wx.MenuBar()
@@ -173,7 +213,9 @@ class FontReviewerFrame(wx.Frame):
             self.directory = new_directory
             self.default_dir = new_directory
 
-        self.SetStatusText("Scanning fonts...")
+        self.set_status_text("Scanning fonts...")
+        self.start_activity()
+
         thread = threading.Thread(target=self.load_fonts_background, daemon=True)
         thread.start()
 
@@ -181,7 +223,6 @@ class FontReviewerFrame(wx.Frame):
         try:
             state = collect_fonts(self.directory)
 
-            # Apply Regular Only filter only if checkbox is checked
             if self.regular_only:
                 for key in list(state.found.keys()):
                     reg = get_regular(state.found[key])
@@ -190,7 +231,7 @@ class FontReviewerFrame(wx.Frame):
 
             self.found_dict = state.found
 
-            wx.CallAfter(self.SetStatusText, "Extracting and registering fonts...")
+            wx.CallAfter(self.set_status_text, "Extracting and registering fonts...")
             done_names = set()
             self.all_fontinfos = []
 
@@ -221,17 +262,19 @@ class FontReviewerFrame(wx.Frame):
                         self.all_fontinfos.append(fi)
                         register_font_linux(fi)
 
-            wx.CallAfter(self.SetStatusText, "Refreshing system font cache...")
+            wx.CallAfter(self.set_status_text, "Refreshing system font cache...")
             subprocess.call(["fc-cache", "-f"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
             wx.CallAfter(self.build_ui)
 
         except Exception as e:
-            wx.CallAfter(self.SetStatusText, f"Error: {e}")
+            wx.CallAfter(self.set_status_text, f"Error: {e}")
             print(f"Loading error: {e}", file=sys.stderr)
+        finally:
+            wx.CallAfter(self.stop_activity)
 
     def build_ui(self):
-        self.SetStatusText("Building font preview...")
+        self.set_status_text("Building font preview...")
 
         if not self.scroll_panel:
             # Top control bar
@@ -243,7 +286,6 @@ class FontReviewerFrame(wx.Frame):
             self.spinner.Bind(wx.EVT_SPINCTRL, self.on_size_change)
             top_sizer.Add(self.spinner, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 8)
 
-            # Regular Only checkbox
             self.regular_checkbox = wx.CheckBox(top_panel, label="Regular Only (if present)")
             self.regular_checkbox.SetValue(self.regular_only)
             self.regular_checkbox.Bind(wx.EVT_CHECKBOX, self.on_regular_checkbox)
@@ -273,7 +315,8 @@ class FontReviewerFrame(wx.Frame):
         self.SetMinSize((950, 600))
         self.SetSize(max(current_size[0], 1050), max(current_size[1], 750))
 
-        self.SetStatusText("Ready - Use spinner to change font size")
+        self.set_status_text("Ready - Use spinner to change font size")
+        self.stop_activity()
 
     def rebuild_labels(self):
         if not self.main_sizer:
@@ -324,9 +367,9 @@ class FontReviewerFrame(wx.Frame):
     def on_regular_checkbox(self, event):
         self.regular_only = self.regular_checkbox.GetValue()
         if self.found_dict:
-            self.SetStatusText("Rebuilding preview with new filter...")
+            self.set_status_text("Rebuilding preview...")
             self.rebuild_labels()
-            self.SetStatusText("Ready - Use spinner to change font size")
+            self.set_status_text("Ready - Use spinner to change font size")
 
     def on_open_directory(self, event):
         start_dir = self.default_dir if self.default_dir and os.path.isdir(self.default_dir) else self.directory
@@ -336,7 +379,7 @@ class FontReviewerFrame(wx.Frame):
         if dlg.ShowModal() == wx.ID_OK:
             new_dir = dlg.GetPath()
             self.default_dir = new_dir
-            self.SetStatusText(f"Opening directory: {new_dir}")
+            self.set_status_text(f"Opening directory: {new_dir}")
             if self.main_sizer:
                 self.main_sizer.Clear(True)
             self.all_fontinfos = []
@@ -346,7 +389,7 @@ class FontReviewerFrame(wx.Frame):
 
     def on_save_image(self, event):
         if not self.scroll_panel or not self.found_dict:
-            self.SetStatusText("No preview available to save.")
+            self.set_status_text("No preview available to save.")
             return
 
         start_dir = self.default_dir if self.default_dir else os.getcwd()
@@ -376,10 +419,10 @@ class FontReviewerFrame(wx.Frame):
                 img = bmp.ConvertToImage()
                 img.SaveFile(filepath, wx.BITMAP_TYPE_PNG)
 
-                self.SetStatusText(f"Saved: {os.path.basename(filepath)}")
+                self.set_status_text(f"Saved: {os.path.basename(filepath)}")
 
             except Exception as e:
-                self.SetStatusText(f"Save failed: {str(e)}")
+                self.set_status_text(f"Save failed: {str(e)}")
                 print(f"Save error: {e}", file=sys.stderr)
         dlg.Destroy()
 
