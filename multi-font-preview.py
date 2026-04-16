@@ -363,7 +363,7 @@ class FontReviewerFrame(wx.Frame):
         new_size = self.spinner.GetValue()
         if new_size != self.current_size:
             self.current_size = new_size
-            self.rebuild_labels(full_rebuild=False)
+            self.rebuild_labels(full_rebuild=True)
 
     def on_regular_checkbox(self, event):
         self.regular_only = self.regular_checkbox.GetValue()
